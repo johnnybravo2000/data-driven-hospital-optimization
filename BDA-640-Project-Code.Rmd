@@ -1,0 +1,773 @@
+---
+title: "BDA 640 Project Code"
+author: "John Pole Madhu"
+date: "2025-02-26"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(readr)
+#install.packages("GGally")
+OU_Data <- read.csv("/Users/johnpolemadhu/Downloads/OUData (1).csv")
+head(OU_Data)
+str(OU_Data)
+```
+```{r}
+#datacleaning
+Clean_OU_Data <- OU_Data[,c(-1,-5,-7)]
+
+#converting to factor variables
+Clean_OU_Data$Gender <- as.factor(Clean_OU_Data$Gender)
+Clean_OU_Data$PrimaryInsuranceCategory <- as.factor(Clean_OU_Data$PrimaryInsuranceCategory)
+Clean_OU_Data$Flipped <- as.factor(Clean_OU_Data$Flipped)
+Clean_OU_Data$DRG01 <- as.factor(Clean_OU_Data$DRG01)
+
+#converting to numeric variables
+Clean_OU_Data$Pulse < as.numeric(Clean_OU_Data$Pulse)
+unique(Clean_OU_Data$Pulse)
+table(Clean_OU_Data$Pulse, useNA = "ifany")
+Clean_OU_Data$Pulse[Clean_OU_Data$Pulse %in% c("", "NA", "N/A", "?")] <- NA
+Clean_OU_Data$Pulse <- as.numeric(Clean_OU_Data$Pulse)
+str(Clean_OU_Data)
+Clean_OU_Data$PulseOximetry <- as.numeric(Clean_OU_Data$PulseOximetry)
+Clean_OU_Data$BloodPressureUpper<-as.numeric(Clean_OU_Data$BloodPressureUpper)
+Clean_OU_Data$BloodPressureLower <- as.numeric(Clean_OU_Data$BloodPressureLower)
+Clean_OU_Data$BloodPressureDiff <- as.numeric(Clean_OU_Data$BloodPressureDiff)
+Clean_OU_Data$Respirations<- as.numeric(Clean_OU_Data$Respirations)
+Clean_OU_Data$Temperature<-as.numeric(Clean_OU_Data$Temperature)
+
+str(Clean_OU_Data)
+```
+```{r}
+#Scaled
+
+# Standardizing only the numeric columns
+num_cols <- sapply(Clean_OU_Data, is.numeric)
+Clean_OU_Data_standardized <- Clean_OU_Data
+
+# Apply scaling to only numeric columns
+Clean_OU_Data_standardized[num_cols] <- scale(Clean_OU_Data[num_cols])
+
+# Checking the summary of the standardized numeric columns
+summary(Clean_OU_Data_standardized[num_cols])
+```
+```{r}
+# Checking for NA values
+non_numeric_entries <- sapply(Clean_OU_Data_standardized[, c("Pulse", "PulseOximetry", "Respirations", 
+                                              "Temperature", "BloodPressureUpper", 
+                                              "BloodPressureLower", "BloodPressureDiff")], 
+                              function(x) sum(is.na(as.numeric(x))))
+
+print(non_numeric_entries)
+```
+```{r}
+Clean_OU_Data_standardized$BloodPressureUpper[is.na(Clean_OU_Data_standardized$BloodPressureUpper)] <- median(Clean_OU_Data_standardized$BloodPressureUpper, na.rm = TRUE)
+Clean_OU_Data_standardized$BloodPressureDiff[is.na(Clean_OU_Data_standardized$BloodPressureDiff)] <- mean(Clean_OU_Data_standardized$BloodPressureDiff, na.rm = TRUE)
+Clean_OU_Data_standardized$Pulse[is.na(Clean_OU_Data_standardized$Pulse)] <- mean(Clean_OU_Data_standardized$Pulse, na.rm = TRUE)
+Clean_OU_Data_standardized$PulseOximetry[is.na(Clean_OU_Data_standardized$PulseOximetry)] <- median(Clean_OU_Data_standardized$PulseOximetry, na.rm = TRUE)
+Clean_OU_Data_standardized$Respirations[is.na(Clean_OU_Data_standardized$Respirations)] <- mean(Clean_OU_Data_standardized$Respirations, na.rm = TRUE)
+Clean_OU_Data_standardized$Temperature[is.na(Clean_OU_Data_standardized$Temperature)] <- median(Clean_OU_Data_standardized$Temperature, na.rm = TRUE)
+
+NA_Val <- colSums(is.na(Clean_OU_Data_standardized))
+NA_Val
+
+str(Clean_OU_Data_standardized)
+```
+```{r}
+# EDA
+library(ggplot2)
+library(GGally) # Ensure this is loaded
+
+# Distribution of Continuous Variables
+con_variables <- c("Age", "BloodPressureUpper", "BloodPressureLower", 
+                     "BloodPressureDiff", "Pulse", "PulseOximetry", "Respirations", "Temperature")
+str(Clean_OU_Data_standardized[con_variables])
+
+# Correlation Matrix for Continuous Variables
+correlation_matrix <- cor(Clean_OU_Data_standardized[con_variables])
+
+library(ggplot2)
+library(ggcorrplot)
+
+# Generate the correlation matrix (assuming your data is numeric)
+correlation_matrix <- cor(Clean_OU_Data_standardized[con_variables], use = "complete.obs")
+
+# Create the correlation plot
+correlation_plot <- ggcorrplot(correlation_matrix, 
+                               method = "square",  # Use colored tiles
+                               lab = TRUE,        # Show correlation values
+                               lab_size = 3,      # Label size
+                               colors = c("red", "yellow", "green"),  # Color gradient
+                               outline.color = "white") + # Add white grid lines
+                   labs(title = "Correlation Matrix for Continuous Variables") +
+                   theme_minimal() +
+                   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate X labels for readability
+
+# Print the plot
+print(correlation_plot)
+
+# Save the plot
+ggsave("correlation_matrix.png", plot = correlation_plot, width = 7, height = 5)
+
+correlation_matrix
+correlation_plot
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Ensure categorical variables are correctly formatted
+Clean_OU_Data <- Clean_OU_Data %>%
+  mutate(
+    Flipped = factor(Flipped, levels = c(0, 1), labels = c("Not Flipped", "Flipped")),
+    Gender = factor(Gender),
+    PrimaryInsuranceCategory = factor(PrimaryInsuranceCategory)
+  )
+
+# 1️⃣ **Age Distribution (Histogram)**
+ggplot(Clean_OU_Data, aes(x = Age)) +
+  geom_histogram(fill = "dodgerblue", bins = 30, alpha = 0.8, color = "black") +
+  ggtitle("Age Distribution of Patients") +
+  xlab("Age (Years)") +
+  ylab("Count of Patients") +
+  theme_minimal()
+
+# 2️⃣ **Gender vs Flipped Status (Stacked Bar Plot)**
+ggplot(Clean_OU_Data, aes(x = Gender, fill = Flipped)) +
+  geom_bar(position = "fill", alpha = 0.9) +
+  ggtitle("Proportion of Flipped Patients by Gender") +
+  xlab("Gender") +
+  ylab("Proportion") +
+  scale_fill_manual(values = c("Not Flipped" = "seagreen3", "Flipped" = "firebrick2")) +
+  theme_minimal()
+
+# 3️⃣ **Age Distribution by Flipped Status (Density Plot)**
+ggplot(Clean_OU_Data, aes(x = Age, fill = Flipped)) +
+  geom_density(alpha = 0.5) +
+  ggtitle("Age Distribution by Flipped Status") +
+  xlab("Age (Years)") +
+  ylab("Density") +
+  scale_fill_manual(values = c("Not Flipped" = "skyblue", "Flipped" = "tomato")) +
+  theme_minimal()
+
+# 4️⃣ **Primary Insurance Category vs Flipped Status (Proportional Bar Plot)**
+ggplot(Clean_OU_Data, aes(x = PrimaryInsuranceCategory, fill = Flipped)) +
+  geom_bar(position = "fill") +
+  ggtitle("Proportion of Flipped Patients by Insurance Category") +
+  xlab("Primary Insurance Category") +
+  ylab("Proportion") +
+  scale_fill_manual(values = c("Not Flipped" = "mediumorchid", "Flipped" = "goldenrod1")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotates X-axis labels for readability
+
+# 5️⃣ **Length of Stay in OU by Flipped Status (Box Plot)**
+ggplot(OU_Data, aes(x = factor(Flipped), y = OU_LOS_hrs)) + 
+  geom_boxplot(fill = "mistyrose1") + 
+  ggtitle("Length of Stay in OU by Flipped Status") + 
+  xlab("Flipped Status") + 
+  ylab("Length of Stay (Hours)") + 
+  scale_x_discrete(labels = c("0" = "Not Flipped", "1" = "Flipped"))
+
+# 6️⃣ **Overall Flipped vs Not Flipped Proportions (Pie Chart)**
+ggplot(Clean_OU_Data, aes(x = "", fill = Flipped)) +
+  geom_bar(width = 1, stat = "count") +
+  coord_polar("y") +
+  ggtitle("Proportion of Flipped vs. Not Flipped Patients") +
+  scale_fill_manual(values = c("Not Flipped" = "darkslategrey", "Flipped" = "paleturquoise3")) +
+  theme_void()
+
+```
+```{r}
+#library(GGally)
+library(ggplot2)
+
+# Scatterplot Matrix for Continuous Variables
+ggpairs(
+  Clean_OU_Data_standardized[con_variables], 
+  title = "Scatterplot Matrix of Continuous Variables",
+  upper = list(continuous = wrap("cor", size = 4, color = "black")), # Correlation values in upper triangle
+  lower = list(continuous = wrap("smooth", color = "blue")), # Smooth trend lines in lower triangle
+  diag = list(continuous = wrap("barDiag", fill = "skyblue")), # Histograms on diagonal
+  progress = FALSE
+) +
+  theme_minimal() # Clean minimal theme
+
+```
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Melt the correlation matrix for ggplot
+correlation_matrix_melted <- melt(correlation_matrix)
+
+# Create the heatmap
+ggplot(correlation_matrix_melted, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +  # White grid lines for better separation
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0, 
+                       name = "Correlation") + # Balanced color scale with midpoint at 0
+  theme_minimal() +
+  labs(title = "Correlation Heatmap", x = "Variables", y = "Variables") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate X labels for readability
+        axis.text.y = element_text(size = 10),
+        plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(knitr)  # For better table display
+
+# Summarizing continuous variables by Flipped status
+summary_data <- Clean_OU_Data_standardized %>%
+  group_by(Flipped) %>%
+  summarize(across(all_of(con_variables), 
+                   list(Mean = ~mean(.x, na.rm = TRUE), 
+                        SD = ~sd(.x, na.rm = TRUE)), 
+                   .names = "{.col}_{.fn}")) %>%
+  ungroup()  # Remove grouping for a cleaner output
+
+# Print summary table in a clean format
+print(summary_data)
+
+# Optional: Display as a formatted table (for reports/notebooks)
+kable(summary_data, digits = 2, caption = "Summary Statistics by Flipped Status")
+
+```
+```{r}
+# Ensure Flipped is taken from the original dataset
+Clean_OU_Data$Flipped <- OU_Data$Flipped  
+
+# Convert logical (TRUE/FALSE) to numeric (1/0)
+Clean_OU_Data$Flipped <- as.integer(Clean_OU_Data$Flipped)  
+
+# Convert numeric to factor with clear labels
+Clean_OU_Data$Flipped <- factor(Clean_OU_Data$Flipped, 
+                                levels = c(0, 1), 
+                                labels = c("Not Flipped", "Flipped"))
+
+# Check structure of Clean_OU_Data
+str(Clean_OU_Data)
+
+```
+```{r}
+library(dplyr)
+
+# Checking levels of Flipped with proportions
+flipped_counts <- Clean_OU_Data_standardized %>%
+  count(Flipped) %>%
+  mutate(Percentage = round(n / sum(n) * 100, 2))  # Calculate percentage
+
+print(flipped_counts)
+
+# Checking levels of Gender with proportions
+gender_counts <- Clean_OU_Data_standardized %>%
+  count(Gender) %>%
+  mutate(Percentage = round(n / sum(n) * 100, 2))  # Calculate percentage
+
+print(gender_counts)
+
+```
+```{r}
+summary(Clean_OU_Data_standardized)
+```
+```{r}
+library(corrplot)
+library(dplyr)
+
+# Select only numeric variables
+numeric_data <- Clean_OU_Data_standardized %>%
+  select(where(is.numeric))
+
+# Compute correlation matrix
+correlation_matrix <- cor(numeric_data, use = "complete.obs")
+
+# Print the correlation matrix in a readable format
+print(round(correlation_matrix, 2))  # Rounds values to 2 decimal places for better readability
+
+# Graphing the correlation matrix with enhancements
+corrplot(correlation_matrix, 
+         method = "color",         # Color shading for correlation values
+         type = "upper",           # Show only upper triangle (avoiding duplicate values)
+         order = "hclust",         # Cluster similar correlations together
+         col = colorRampPalette(c("blue", "white", "red"))(200), # Improved gradient
+         addCoef.col = "black",    # Show correlation values in black
+         number.cex = 0.7,         # Adjust text size
+         tl.col = "black",         # Black text for variable names
+         tl.srt = 45)              # Rotate text labels for better readability
+
+```
+```{r}
+library(caret)
+library(dplyr)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Create train-test split (70% train, 30% test)
+train_index <- createDataPartition(Clean_OU_Data_standardized$Flipped, p = 0.7, list = FALSE)
+
+# Split data into training and test sets
+train_set <- Clean_OU_Data_standardized %>% slice(train_index)
+test_set <- Clean_OU_Data_standardized %>% slice(-train_index)
+
+# Print dimensions of train and test sets
+cat("Training Set Dimensions:", dim(train_set), "\n")
+cat("Test Set Dimensions:", dim(test_set), "\n")
+
+```
+```{r}
+library(dplyr)
+
+# Ensure Flipped is a factor (if not already)
+Clean_OU_Data_standardized <- Clean_OU_Data_standardized %>%
+  mutate(Flipped = as.factor(Flipped))  # Convert to factor if needed
+
+# Fit Logistic Regression Model
+model1 <- glm(Flipped ~ ., 
+              data = train_set,  # Use training set instead of full data
+              family = binomial)
+
+# Display model summary
+summary(model1)
+
+```
+```{r}
+library(caret)
+
+# Ensure test_set$Flipped has the same factor levels as logistic_pred_class
+test_set$Flipped <- factor(test_set$Flipped, levels = c(0, 1), labels = c("Not Flipped", "Flipped"))
+
+# Make Predictions on Test Set (Probabilities)
+logistic_pred <- predict(model1, newdata = test_set, type = "response")
+
+# Convert Probabilities to Class Labels (Threshold = 0.6)
+logistic_pred_class <- factor(ifelse(logistic_pred > 0.6, "Flipped", "Not Flipped"), 
+                              levels = c("Not Flipped", "Flipped"))
+
+# Evaluate Logistic Regression with Confusion Matrix
+confusion_logistic <- confusionMatrix(logistic_pred_class, test_set$Flipped)
+
+# Print Confusion Matrix
+print(confusion_logistic)
+
+# Calculate Flipped Rate (Percentage of Predicted Flipped Cases)
+flipped_rate <- mean(logistic_pred_class == "Flipped") * 100
+cat("Flipped Rate:", round(flipped_rate, 2), "%\n")
+
+```
+```{r}
+library(randomForest)
+library(caret)
+
+# Ensure Flipped is a factor
+train_set$Flipped <- factor(train_set$Flipped, levels = c(0, 1), labels = c("Not Flipped", "Flipped"))
+#test_set$Flipped <- factor(test_set$Flipped, levels = c(0, 1), labels = c("Not Flipped", "Flipped"))
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Train the Random Forest model
+rf_model <- randomForest(Flipped ~ ., 
+                         data = train_set, 
+                         importance = TRUE, 
+                         ntree = 500, 
+                         mtry = floor(sqrt(ncol(train_set) - 1)), # Optimal number of variables at each split
+                         nodesize = 5) # Minimum number of observations in terminal nodes
+
+# Print model summary
+print(rf_model)
+
+# Make predictions on the test set
+rf_predictions <- predict(rf_model, test_set)
+
+# Evaluate model performance using confusion matrix
+rf_confusion <- confusionMatrix(rf_predictions, test_set$Flipped)
+
+# Print confusion matrix and accuracy
+print(rf_confusion)
+
+# Print variable importance
+rf_importance <- importance(rf_model)
+print(rf_importance)
+
+# Plot variable importance
+varImpPlot(rf_model, main = "Feature Importance in Random Forest")
+
+```
+```{r}
+# Predicting probabilities instead of class labels
+rf_probabilities <- predict(rf_model, test_set, type = "prob")
+
+# Define classification threshold
+threshold <- 0.6
+
+# Convert probabilities to class labels based on threshold
+rf_pred_class <- factor(ifelse(rf_probabilities[, "Flipped"] > threshold, "Flipped", "Not Flipped"),
+                        levels = c("Not Flipped", "Flipped"))
+
+# Ensure test_set$Flipped is a factor with correct levels
+test_set$Flipped <- factor(test_set$Flipped, levels = c("Not Flipped", "Flipped"))
+
+# Evaluate model with the new threshold
+rf_confusion <- confusionMatrix(rf_pred_class, test_set$Flipped)
+
+# Print confusion matrix and performance metrics
+print(rf_confusion)
+
+# Calculate and print Flipped Rate
+flipped_rate_rf <- mean(rf_pred_class == "Flipped") * 100
+cat("Random Forest Flipped Rate:", round(flipped_rate_rf, 2), "%\n")
+
+```
+```{r}
+library(rpart)
+library(rpart.plot)
+library(caret)
+
+# Train the Decision Tree model
+decision_tree <- rpart(Flipped ~ ., 
+                       data = train_set,  # Explicitly define dataset
+                       method = "class", 
+                       control = rpart.control(minsplit = 20, cp = 0.01))
+
+# Print Model Summary
+printcp(decision_tree)
+summary(decision_tree)
+
+# Visualize the Decision Tree
+rpart.plot(decision_tree, type = 2, extra = 104, under = TRUE, tweak = 1.2,
+           main = "Decision Tree for Flipped Prediction")
+
+# Make Predictions on Test Set
+dt_predictions <- predict(decision_tree, test_set, type = "class")
+
+# Evaluate Model with Confusion Matrix
+dt_confusion <- confusionMatrix(dt_predictions, test_set$Flipped)
+
+# Print Confusion Matrix
+print(dt_confusion)
+```
+```{r}
+
+# Train the Decision Tree model
+decision_tree <- rpart(Flipped ~ ., data = train_set, method = "class")
+
+# Predict probabilities
+dt_probabilities <- predict(decision_tree, test_set, type = "prob")
+
+# Set your own threshold (e.g., 0.6)
+threshold <- 0.6
+dt_pred_class <- ifelse(dt_probabilities[,2] > threshold, 1, 0)
+
+levels(as.factor(dt_pred_class))
+levels(as.factor(test_set$Flipped))
+
+dt_pred_class <- factor(dt_pred_class, levels = levels(as.factor(test_set$Flipped)))
+
+dt_pred_class <- factor(dt_pred_class, levels = unique(c(levels(as.factor(test_set$Flipped)), levels(as.factor(dt_pred_class)))))
+
+setdiff(levels(as.factor(test_set$Flipped)), levels(as.factor(dt_pred_class)))
+test_set$Flipped <- trimws(test_set$Flipped)
+dt_pred_class <- trimws(dt_pred_class)
+
+#dt_pred_class <- na.omit(dt_pred_class)
+#test_set$Flipped <- na.omit(test_set$Flipped)
+
+library(caret)
+#confusionMatrix(dt_pred_class, test_set$Flipped)
+
+# Evaluate the model with the new threshold
+#confusionMatrix(as.factor(dt_pred_class), as.factor(test_set$Flipped))
+
+# Calculate flipped rate (proportion of 1s predicted)
+flipped_rate_dt <- mean(dt_pred_class == 1)
+print(paste("Flipped Rate (Decision Tree):", round(flipped_rate_dt * 100, 2), "%"))
+
+# Visualize the Decision Tree
+rpart.plot(decision_tree)
+
+```
+```{r}
+# Load necessary libraries
+library(pROC)
+
+# Ensure Flipped is a binary factor
+
+# Convert Flipped to numeric for ROC calculation (pROC requires numeric response)
+test_set$Flipped_numeric <- ifelse(test_set$Flipped == "Flipped", 1, 0)
+
+# ---- Logistic Regression ROC & AUC ----
+roc_logistic <- roc(test_set$Flipped_numeric, logistic_pred)
+auc_logistic <- auc(roc_logistic)
+print(paste("AUC for Logistic Regression:", round(auc_logistic, 4)))
+
+# ---- Random Forest ROC & AUC ----
+rf_prob <- predict(rf_model, newdata = test_set, type = "prob")[, "Flipped"]
+roc_rf <- roc(test_set$Flipped_numeric, rf_prob)
+auc_rf <- auc(roc_rf)
+print(paste("AUC for Random Forest:", round(auc_rf, 4)))
+
+# ---- Decision Tree ROC & AUC ----
+tree_prob <- predict(decision_tree, newdata = test_set, type = "prob")[, "Flipped"]
+roc_tree <- roc(test_set$Flipped_numeric, tree_prob)
+auc_tree <- auc(roc_tree)
+print(paste("AUC for Decision Tree:", round(auc_tree, 4)))
+
+# ---- Plot ROC Curves for All Models ----
+plot(roc_logistic, col = "red", lwd = 2, main = "ROC Curve - Model Comparison", legacy.axes = TRUE)
+plot(roc_rf, col = "green", lwd = 2, add = TRUE)
+plot(roc_tree, col = "blue", lwd = 2, add = TRUE)
+
+# Add legend
+legend("bottomright", legend = c(paste("Logistic Regression (AUC:", round(auc_logistic, 3), ")"),
+                                 paste("Random Forest (AUC:", round(auc_rf, 3), ")"),
+                                 paste("Decision Tree (AUC:", round(auc_tree, 3), ")")),
+       col = c("red", "green", "blue"), lwd = 2, bg = "white")
+
+```
+```{r}
+# Train Logistic Regression Model with Selected Features
+model2 <- glm(Flipped ~ PrimaryInsuranceCategory + DRG01, 
+              data = train_set, 
+              family = binomial)
+
+# Display Model Summary
+summary(model2)
+
+```
+
+
+```{r}
+# Make Predictions on Test Set (Probabilities)
+logistic_pred2 <- predict(model2, newdata = test_set, type = "response")
+
+# Convert Probabilities to Class Labels (Threshold = 0.5)
+logistic_pred_class2 <- factor(ifelse(logistic_pred2 > 0.5, "Flipped", "Not Flipped"),
+                               levels = c("Not Flipped", "Flipped"))
+
+# Ensure predicted values have the same levels as actual values
+test_set$Flipped <- factor(test_set$Flipped, levels = levels(logistic_pred_class2))
+
+# Evaluate Logistic Regression with Confusion Matrix
+confusion_logistic <- confusionMatrix(logistic_pred_class2, test_set$Flipped)
+
+# Print Confusion Matrix
+print(confusion_logistic)
+
+# Calculate and print Flipped Rate (percentage of predicted "Flipped" cases)
+flipped_rate <- mean(logistic_pred_class2 == "Flipped") * 100
+cat("Flipped Rate:", round(flipped_rate, 2), "%\n")
+
+```
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Train the Random Forest model with only significant predictors
+rf_model2 <- randomForest(Flipped ~ PrimaryInsuranceCategory + DRG01, 
+                          data = train_set, 
+                          importance = TRUE, 
+                          ntree = 500, 
+                          mtry = 2,  # Number of variables randomly sampled at each split
+                          nodesize = 5)  # Minimum size of terminal nodes to avoid overfitting
+
+# Print model summary
+print(rf_model2)
+
+# Print variable importance
+importance(rf_model2)
+
+# Plot variable importance
+varImpPlot(rf_model2, main = "Feature Importance in Random Forest (Sig Variables)")
+
+```
+```{r}
+# Make Predictions on Test Set
+rf_predictions <- predict(rf_model2, newdata = test_set)
+
+# Ensure predicted values have the same levels as actual values
+rf_predictions <- factor(rf_predictions, levels = levels(test_set$Flipped))
+
+# Evaluate Model with Confusion Matrix
+rf_confusion <- confusionMatrix(rf_predictions, test_set$Flipped)
+
+# Print Confusion Matrix
+print(rf_confusion)
+
+# Print Variable Importance
+print(importance(rf_model2))
+
+# Plot Variable Importance
+varImpPlot(rf_model2, main = "Feature Importance in Random Forest (Significant Variables)")
+
+```
+```{r}
+# Train the Random Forest model with selected features
+rf_model2 <- randomForest(Flipped ~ PrimaryInsuranceCategory + DRG01, 
+                          data = train_set, 
+                          importance = TRUE, 
+                          ntree = 500, 
+                          mtry = 2,   # Since only 2 predictors
+                          nodesize = 5)  # Prevents overfitting
+
+# Predict probabilities instead of direct class labels
+rf_probabilities2 <- predict(rf_model2, newdata = test_set, type = "prob")
+
+# Define classification threshold
+threshold <- 0.6
+
+# Convert probabilities to class labels based on threshold
+rf_pred_class2 <- factor(ifelse(rf_probabilities2[, "Flipped"] > threshold, "Flipped", "Not Flipped"),
+                         levels = c("Not Flipped", "Flipped"))
+
+# Ensure test_set$Flipped and rf_pred_class2 have the same factor levels
+test_set$Flipped <- factor(test_set$Flipped, levels = levels(rf_pred_class2))
+
+# Evaluate model with Confusion Matrix
+rf_confusion2 <- confusionMatrix(rf_pred_class2, test_set$Flipped)
+
+# Print Confusion Matrix
+print(rf_confusion2)
+
+# Calculate and print Flipped Rate (percentage of predicted "Flipped" cases)
+flipped_rate_rf2 <- mean(rf_pred_class2 == "Flipped") * 100
+cat("Flipped Rate (Random Forest):", round(flipped_rate_rf2, 2), "%\n")
+
+```
+```{r}
+# Ensure predictors are factors if categorical
+train_set$PrimaryInsuranceCategory <- factor(train_set$PrimaryInsuranceCategory)
+train_set$DRG01 <- factor(train_set$DRG01)
+test_set$PrimaryInsuranceCategory <- factor(test_set$PrimaryInsuranceCategory)
+test_set$DRG01 <- factor(test_set$DRG01)
+
+# Train the Decision Tree model with selected significant features
+decision_tree2 <- rpart(Flipped ~ PrimaryInsuranceCategory + DRG01, 
+                        data = train_set, 
+                        method = "class", 
+                        control = rpart.control(minsplit = 20, cp = 0.01))  # Prevents overfitting
+
+# Print model summary
+printcp(decision_tree2)
+summary(decision_tree2)
+
+# Visualize the Decision Tree with better formatting
+rpart.plot(decision_tree2, type = 2, extra = 104, under = TRUE, tweak = 1.2,
+           main = "Decision Tree for Significant Variables")
+
+# Make Predictions on Test Set
+dt_predictions <- predict(decision_tree2, newdata = test_set, type = "class")
+
+# Ensure predicted values have the same levels as actual values
+dt_predictions <- factor(dt_predictions, levels = levels(test_set$Flipped))
+
+# Evaluate Model with Confusion Matrix
+dt_confusion <- confusionMatrix(dt_predictions, test_set$Flipped)
+
+# Print Confusion Matrix
+print(dt_confusion)
+
+```
+```{r}
+library(rpart)
+library(rpart.plot)
+library(caret)
+# Ensure categorical predictors are factors
+train_set$PrimaryInsuranceCategory <- factor(train_set$PrimaryInsuranceCategory)
+train_set$DRG01 <- factor(train_set$DRG01)
+test_set$PrimaryInsuranceCategory <- factor(test_set$PrimaryInsuranceCategory)
+test_set$DRG01 <- factor(test_set$DRG01)
+
+# Train the Decision Tree model
+decision_tree2 <- rpart(Flipped ~ PrimaryInsuranceCategory + DRG01, 
+                        data = train_set, 
+                        method = "class", 
+                        control = rpart.control(minsplit = 20, cp = 0.01))  # Prevents overfitting
+
+# Predict probabilities instead of direct class labels
+dt_probabilities2 <- predict(decision_tree2, newdata = test_set, type = "prob")
+
+# Define classification threshold
+threshold <- 0.6
+
+# Convert probabilities to class labels based on threshold
+dt_pred_class2 <- factor(ifelse(dt_probabilities2[, "Flipped"] > threshold, "Flipped", "Not Flipped"),
+                         levels = c("Not Flipped", "Flipped"))
+
+# Ensure test_set$Flipped and dt_pred_class2 have the same factor levels
+test_set$Flipped <- factor(test_set$Flipped, levels = levels(dt_pred_class2))
+
+# Evaluate model with Confusion Matrix
+dt_confusion2 <- confusionMatrix(dt_pred_class2, test_set$Flipped)
+
+# Print Confusion Matrix
+print(dt_confusion2)
+
+# Calculate and print Flipped Rate (percentage of predicted "Flipped" cases)
+flipped_rate_dt2 <- mean(dt_pred_class2 == "Flipped") * 100
+cat("Flipped Rate (Decision Tree):", round(flipped_rate_dt2, 2), "%\n")
+
+# Visualize the Decision Tree
+rpart.plot(decision_tree2, type = 2, extra = 104, under = TRUE, tweak = 1.2,
+           main = "Decision Tree for Flipped Rate Prediction")
+
+```
+```{r}
+# Load necessary libraries
+library(pROC)
+# ---- Logistic Regression ROC & AUC ----
+roc_logistic <- roc(test_set$Flipped_numeric, logistic_pred2)
+auc_logistic <- auc(roc_logistic)
+print(paste("AUC for Logistic Regression:", round(auc_logistic, 4)))
+
+# ---- Random Forest ROC & AUC ----
+rf_prob <- predict(rf_model2, newdata = test_set, type = "prob")[, "Flipped"]
+roc_rf <- roc(test_set$Flipped_numeric, rf_prob)
+auc_rf <- auc(roc_rf)
+print(paste("AUC for Random Forest:", round(auc_rf, 4)))
+
+# ---- Decision Tree ROC & AUC ----
+tree_prob <- predict(decision_tree2, newdata = test_set, type = "prob")[, "Flipped"]
+roc_tree <- roc(test_set$Flipped_numeric, tree_prob)
+auc_tree <- auc(roc_tree)
+print(paste("AUC for Decision Tree:", round(auc_tree, 4)))
+
+# ---- Plot ROC Curves for All Models ----
+plot(roc_logistic, col = "red", lwd = 2, main = "ROC Curve - Model Comparison", legacy.axes = TRUE)
+plot(roc_rf, col = "green", lwd = 2, add = TRUE)
+plot(roc_tree, col = "blue", lwd = 2, add = TRUE)
+
+# Add legend with AUC values
+legend("bottomright", legend = c(paste("Logistic Regression (AUC:", round(auc_logistic, 3), ")"),
+                                 paste("Random Forest (AUC:", round(auc_rf, 3), ")"),
+                                 paste("Decision Tree (AUC:", round(auc_tree, 3), ")")),
+       col = c("red", "green", "blue"), lwd = 2, bg = "white")
+
+```
+```{r}
+# Select columns by removing the specified indices
+Clean_OU_Data2 <- OU_Data[, -c(1, 5, 6)]  # Removes columns 1, 5, and 6
+
+# Ensure categorical variables are factors
+Clean_OU_Data2$Gender <- factor(OU_Data$Gender)
+Clean_OU_Data2$DRG01 <- factor(OU_Data$DRG01)
+Clean_OU_Data2$PrimaryInsuranceCategory <- factor(OU_Data$PrimaryInsuranceCategory)
+
+# Convert numeric variables correctly, handling potential character values
+numeric_vars <- c("Pulse", "PulseOximetry", "Respirations", "Temperature", 
+                  "BloodPressureUpper", "BloodPressureLower", "BloodPressureDiff", "OU_LOS_hrs")
+
+# Convert specified columns to numeric, suppressing warnings for non-numeric values
+Clean_OU_Data2[numeric_vars] <- lapply(Clean_OU_Data2[numeric_vars], function(x) as.numeric(as.character(x)))
+
+# Display structure of CleanOUData2
+str(Clean_OU_Data2)
+
+```
+```{r}
+model3 <- lm(OU_LOS_hrs ~ ., data = Clean_OU_Data2)
+
+summary(model3)
+```
+
